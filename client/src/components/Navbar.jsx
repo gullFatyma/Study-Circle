@@ -31,7 +31,8 @@ const Navbar = () => {
 
   const [menuOpen, setMenuOpen] =
     useState(false);
-
+    const [mobileMenuOpen, setMobileMenuOpen] =
+      useState(false);
   const loadUnreadCount = async () => {
     try {
       const { data } = await api.get(
@@ -159,6 +160,32 @@ const Navbar = () => {
         </div>
 
         <div className="nav-right">
+          <button
+  type="button"
+  className="mobile-menu-button"
+  onClick={() =>
+    setMobileMenuOpen(
+      (current) => !current
+    )
+  }
+  aria-label="Open navigation menu"
+>
+  {mobileMenuOpen ? (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  ) : (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  )}
+</button>
           {user ? (
             <>
               {/* Notification bell */}
@@ -288,6 +315,73 @@ const Navbar = () => {
             </>
           )}
         </div>
+        {mobileMenuOpen && (
+  <div className="mobile-nav-menu">
+    <NavLink
+      to="/"
+      className={navClass}
+      onClick={() =>
+        setMobileMenuOpen(false)
+      }
+    >
+      Feed
+    </NavLink>
+
+    {user && (
+      <>
+        <NavLink
+          to="/messages"
+          className={navClass}
+          onClick={() =>
+            setMobileMenuOpen(false)
+          }
+        >
+          Messages
+
+          {unreadCount > 0 && (
+            <span className="mobile-menu-badge">
+              {unreadCount}
+            </span>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/profile"
+          className={navClass}
+          onClick={() =>
+            setMobileMenuOpen(false)
+          }
+        >
+          Profile
+        </NavLink>
+      </>
+    )}
+
+    {!user && (
+      <>
+        <NavLink
+          to="/login"
+          className={navClass}
+          onClick={() =>
+            setMobileMenuOpen(false)
+          }
+        >
+          Login
+        </NavLink>
+
+        <NavLink
+          to="/signup"
+          className={navClass}
+          onClick={() =>
+            setMobileMenuOpen(false)
+          }
+        >
+          Sign Up
+        </NavLink>
+      </>
+    )}
+  </div>
+)}
       </nav>
     </header>
   );
