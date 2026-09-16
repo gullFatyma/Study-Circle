@@ -1,11 +1,13 @@
 import {
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import {
   Link,
+  NavLink,
   useNavigate,
 } from "react-router-dom";
 
@@ -22,9 +24,13 @@ const Navbar = () => {
     useContext(AuthContext);
 
   const navigate = useNavigate();
+  const menuRef = useRef(null);
 
   const [unreadCount, setUnreadCount] =
     useState(0);
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
 
   const loadUnreadCount = async () => {
     try {
@@ -47,45 +53,22 @@ const Navbar = () => {
       return;
     }
 
-    // Socket ko JWT token ke saath connect karo
     connectSocket();
-
-    // Initial unread count
     loadUnreadCount();
 
-    /*
-      New private message receive hone par
-      navbar badge instantly update hoga.
-    */
     const handleNewMessage = () => {
       setUnreadCount(
         (currentCount) => currentCount + 1
       );
     };
 
-    /*
-      Messages page conversation read karne ke baad
-      ye custom browser event dispatch karega.
-    */
     const handleMessagesRead = () => {
       loadUnreadCount();
-    };
-
-    const handleSocketError = (error) => {
-      console.error(
-        "Socket connection error:",
-        error.message
-      );
     };
 
     socket.on(
       "message:new",
       handleNewMessage
-    );
-
-    socket.on(
-      "connect_error",
-      handleSocketError
     );
 
     window.addEventListener(
@@ -99,11 +82,6 @@ const Navbar = () => {
         handleNewMessage
       );
 
-      socket.off(
-        "connect_error",
-        handleSocketError
-      );
-
       window.removeEventListener(
         "messages:read-local",
         handleMessagesRead
@@ -111,107 +89,207 @@ const Navbar = () => {
     };
   }, [user]);
 
+  // Dropdown se bahar click karne par close
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+    };
+  }, []);
+
   const handleLogout = () => {
     disconnectSocket();
     logout();
+    setMenuOpen(false);
     navigate("/login");
   };
 
+  const navClass = ({ isActive }) =>
+    isActive
+      ? "nav-link nav-link-active"
+      : "nav-link";
+
   return (
-    <nav
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "15px 30px",
-        borderBottom: "1px solid #ddd",
-      }}
-    >
-      <Link
-        to="/"
-        style={{
-          fontWeight: "bold",
-          fontSize: "20px",
-          textDecoration: "none",
-        }}
-      >
-        StudyCircle
-      </Link>
+    <header className="site-header">
+      <nav className="site-navbar">
+        <Link
+          to="/"
+          className="site-logo"
+        >
+          StudyCircle
+        </Link>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "15px",
-          alignItems: "center",
-        }}
-      >
-        {user ? (
-          <>
-            <Link to="/">
-              Feed
-            </Link>
+        <div className="nav-center">
+          <NavLink
+            to="/"
+            className={navClass}
+          >
+            Feed
+          </NavLink>
 
-            <Link
-              to="/messages"
-              style={{
-                position: "relative",
-                display: "inline-block",
-              }}
-            >
-              Messages
+          <NavLink
+            to="/messages"
+            className={navClass}
+          >
+            Messages
+          </NavLink>
 
-              {unreadCount > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: "-10px",
-                    right: "-14px",
-                    minWidth: "18px",
-                    height: "18px",
-                    padding: "0 4px",
-                    borderRadius: "999px",
-                    background: "#dc2626",
-                    color: "white",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    boxSizing: "border-box",
-                  }}
+          <NavLink
+            to="/profile"
+            className={navClass}
+          >
+            Profile
+          </NavLink>
+        </div>
+
+        <div className="nav-right">
+          {user ? (
+            <>
+              {/* Notification bell */}
+
+              <Link
+                to="/messages"
+                className="notification-button"
+                aria-label="Open unread messages"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="notification-icon"
+                  aria-hidden="true"
                 >
-                  {unreadCount > 99
-                    ? "99+"
-                    : unreadCount}
-                </span>
-              )}
-            </Link>
+                  <path
+                    d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
 
-            <Link to="/profile">
-              Profile
-            </Link>
+                  <path
+                    d="M10 21h4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
 
-            <span>
-              Hi, {user.name}
-            </span>
+                {unreadCount > 0 && (
+                  <span className="notification-badge">
+                    {unreadCount > 99
+                      ? "99+"
+                      : unreadCount}
+                  </span>
+                )}
+              </Link>
 
-            <button onClick={handleLogout}>
-              Logout
-            </button>
-          </>
-        ) : (
-          <>
-            <Link to="/login">
-              Login
-            </Link>
+              <div className="navbar-divider" />
 
-            <Link to="/signup">
-              Sign Up
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
+              {/* User menu */}
+
+              <div
+                className="user-menu"
+                ref={menuRef}
+              >
+                <button
+                  type="button"
+                  className="user-menu-button"
+                  onClick={() =>
+                    setMenuOpen(
+                      (current) => !current
+                    )
+                  }
+                >
+                  <span className="navbar-avatar">
+                    {user.name
+                      ?.charAt(0)
+                      .toUpperCase()}
+                  </span>
+
+                  <span className="navbar-greeting">
+                    Hi, {user.name}
+                  </span>
+
+                  <svg
+                    viewBox="0 0 24 24"
+                    className={
+                      menuOpen
+                        ? "chevron-icon chevron-open"
+                        : "chevron-icon"
+                    }
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m7 10 5 5 5-5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                {menuOpen && (
+                  <div className="user-dropdown">
+                    <Link
+                      to="/profile"
+                      className="dropdown-item"
+                      onClick={() =>
+                        setMenuOpen(false)
+                      }
+                    >
+                      View Profile
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="dropdown-item dropdown-logout"
+                      onClick={handleLogout}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <NavLink
+                to="/login"
+                className={navClass}
+              >
+                Login
+              </NavLink>
+
+              <NavLink
+                to="/signup"
+                className={navClass}
+              >
+                Sign Up
+              </NavLink>
+            </>
+          )}
+        </div>
+      </nav>
+    </header>
   );
 };
 

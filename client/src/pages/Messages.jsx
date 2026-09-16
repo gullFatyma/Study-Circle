@@ -1,6 +1,7 @@
 import {
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -14,26 +15,45 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import api from "../services/api";
 
+import socket, {
+  connectSocket,
+} from "../socket";
+
 const Messages = () => {
   const { conversationId } = useParams();
+
   const { user, loading: authLoading } =
     useContext(AuthContext);
 
   const navigate = useNavigate();
   const bottomRef = useRef(null);
 
-  const [conversations, setConversations] = useState([]);
-  const [conversation, setConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] =
+    useState([]);
 
+  const [conversation, setConversation] =
+    useState(null);
+
+  const [messages, setMessages] = useState([]);
+  const [search, setSearch] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState(null);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
 
   const loadConversations = async () => {
-    const { data } = await api.get("/messages");
-    setConversations(data);
+    try {
+      const { data } = await api.get(
+        "/messages"
+      );
+
+      setConversations(data);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Could not load conversations"
+      );
+    }
   };
 
   const loadThread = async () => {
@@ -51,6 +71,12 @@ const Messages = () => {
       setConversation(data.conversation);
       setMessages(data.messages);
       setError("");
+
+      window.dispatchEvent(
+        new Event("messages:read-local")
+      );
+
+      await loadConversations();
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -66,17 +92,85 @@ const Messages = () => {
   }, [authLoading, user, navigate]);
 
   useEffect(() => {
-    if (user) {
-      loadConversations().catch(() => {
-        setError("Could not load messages");
-      });
-    }
+    if (!user) return;
+
+    connectSocket();
+    loadConversations();
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      loadThread();
-    }
+    if (!user) return;
+
+    loadThread();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, user?._id]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleNewMessage = async (
+      payload
+    ) => {
+      if (
+        payload.conversationId ===
+        conversationId
+      ) {
+        await loadThread();
+      } else {
+        await loadConversations();
+      }
+    };
+
+    const handleMessagesRead = (
+      payload
+    ) => {
+      if (
+        payload.conversationId !==
+        conversationId
+      ) {
+        return;
+      }
+
+      setMessages((currentMessages) =>
+        currentMessages.map((message) => {
+          const senderId =
+            message.sender?._id ||
+            message.sender;
+
+          if (senderId === user._id) {
+            return {
+              ...message,
+              read: true,
+            };
+          }
+
+          return message;
+        })
+      );
+    };
+
+    socket.on(
+      "message:new",
+      handleNewMessage
+    );
+
+    socket.on(
+      "messages:read",
+      handleMessagesRead
+    );
+
+    return () => {
+      socket.off(
+        "message:new",
+        handleNewMessage
+      );
+
+      socket.off(
+        "messages:read",
+        handleMessagesRead
+      );
+    };
   }, [conversationId, user]);
 
   useEffect(() => {
@@ -85,13 +179,43 @@ const Messages = () => {
     });
   }, [messages]);
 
-  const getOtherParticipant = (item) => {
-    return item?.participants?.find(
-      (participant) => participant._id !== user?._id
+  const getOtherParticipant = (item) =>
+    item?.participants?.find(
+      (participant) =>
+        participant._id !== user?._id
     );
-  };
 
-  const handleSendMessage = async (event) => {
+  const filteredConversations = useMemo(() => {
+    const searchValue =
+      search.trim().toLowerCase();
+
+    if (!searchValue) {
+      return conversations;
+    }
+
+    return conversations.filter(
+      (item) => {
+        const otherUser =
+          getOtherParticipant(item);
+
+        return (
+          otherUser?.name
+            ?.toLowerCase()
+            .includes(searchValue) ||
+          item.request?.title
+            ?.toLowerCase()
+            .includes(searchValue) ||
+          item.request?.subject
+            ?.toLowerCase()
+            .includes(searchValue)
+        );
+      }
+    );
+  }, [conversations, search, user?._id]);
+
+  const handleSendMessage = async (
+    event
+  ) => {
     event.preventDefault();
 
     if (!content.trim()) {
@@ -125,7 +249,9 @@ const Messages = () => {
       setFile(null);
 
       const fileInput =
-        document.getElementById("chat-file");
+        document.getElementById(
+          "chat-file"
+        );
 
       if (fileInput) {
         fileInput.value = "";
@@ -142,11 +268,43 @@ const Messages = () => {
     }
   };
 
+  const formatTime = (date) =>
+    new Date(date).toLocaleTimeString(
+      [],
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+
+  const formatConversationDate = (
+    date
+  ) => {
+    const messageDate = new Date(date);
+    const today = new Date();
+
+    const isToday =
+      messageDate.toDateString() ===
+      today.toDateString();
+
+    if (isToday) {
+      return formatTime(date);
+    }
+
+    return messageDate.toLocaleDateString(
+      [],
+      {
+        month: "short",
+        day: "numeric",
+      }
+    );
+  };
+
   if (authLoading || !user) {
     return (
-      <p style={{ textAlign: "center" }}>
+      <div className="page-loading">
         Loading...
-      </p>
+      </div>
     );
   }
 
@@ -154,253 +312,344 @@ const Messages = () => {
     getOtherParticipant(conversation);
 
   return (
-    <main
-      style={{
-        maxWidth: "1000px",
-        height: "calc(100vh - 95px)",
-        margin: "18px auto",
-        padding: "0 16px",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "310px minmax(0, 1fr)",
-          height: "100%",
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          overflow: "hidden",
-          background: "white",
-        }}
-      >
-        {/* Conversations sidebar */}
+    <main className="messages-page">
+      <div className="messages-shell">
+        {/* Conversation sidebar */}
 
-        <aside
-          style={{
-            borderRight: "1px solid #ddd",
-            overflowY: "auto",
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              padding: "16px",
-              borderBottom: "1px solid #ddd",
-            }}
-          >
-            Messages
-          </h2>
+        <aside className="conversations-panel">
+          <div className="conversations-header">
+            <h1>Messages</h1>
 
-          {conversations.length === 0 ? (
-            <p
-              style={{
-                padding: "16px",
-                color: "#777",
-              }}
-            >
-              No private conversations yet.
+            <p>
+              Collaborate. Learn. Go further
+              together.
             </p>
-          ) : (
-            conversations.map((item) => {
-              const otherUser =
-                getOtherParticipant(item);
+          </div>
 
-              const isActive =
-                item._id === conversationId;
+          <div className="conversation-search">
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle
+                cx="11"
+                cy="11"
+                r="7"
+              />
 
-              return (
-                <Link
-                  key={item._id}
-                  to={`/messages/${item._id}`}
-                  style={{
-                    display: "block",
-                    padding: "14px",
-                    borderBottom: "1px solid #eee",
-                    color: "inherit",
-                    textDecoration: "none",
-                    background: isActive
-                      ? "#eef4ff"
-                      : "white",
-                  }}
-                >
-                  <strong>
-                    {otherUser?.name || "User"}
-                  </strong>
+              <path d="m20 20-4-4" />
+            </svg>
 
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: "#666",
-                      marginTop: "3px",
-                    }}
-                  >
-                    Re: {item.request?.title}
-                  </div>
+            <input
+              type="search"
+              placeholder="Search conversations"
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+            />
+          </div>
 
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      color: "#888",
-                      marginTop: "5px",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {item.lastMessage?.sender?._id ===
-                    user._id
-                      ? "You: "
-                      : ""}
+          <div className="conversation-list">
+            {filteredConversations.length ===
+            0 ? (
+              <div className="empty-conversations">
+                {search
+                  ? "No matching conversations."
+                  : "No private conversations yet."}
+              </div>
+            ) : (
+              filteredConversations.map(
+                (item) => {
+                  const otherUser =
+                    getOtherParticipant(item);
 
-                    {item.lastMessage?.content ||
-                      "Start conversation"}
-                  </div>
-                </Link>
-              );
-            })
-          )}
+                  const isActive =
+                    item._id ===
+                    conversationId;
+
+                  return (
+                    <Link
+                      key={item._id}
+                      to={`/messages/${item._id}`}
+                      className={
+                        isActive
+                          ? "conversation-item conversation-item-active"
+                          : "conversation-item"
+                      }
+                    >
+                      <div className="conversation-avatar">
+                        {otherUser?.name
+                          ?.charAt(0)
+                          .toUpperCase() ||
+                          "U"}
+                      </div>
+
+                      <div className="conversation-content">
+                        <div className="conversation-top-row">
+                          <strong>
+                            {otherUser?.name ||
+                              "User"}
+                          </strong>
+
+                          <span>
+                            {item.lastMessage
+                              ?.createdAt
+                              ? formatConversationDate(
+                                  item
+                                    .lastMessage
+                                    .createdAt
+                                )
+                              : ""}
+                          </span>
+                        </div>
+
+                        <div className="conversation-subject">
+                          {item.request
+                            ?.subject ||
+                            "Study request"}
+                        </div>
+
+                        <div className="conversation-preview-row">
+                          <span className="conversation-preview">
+                            {item.lastMessage
+                              ?.sender?._id ===
+                            user._id
+                              ? "You: "
+                              : ""}
+
+                            {item.lastMessage
+                              ?.content ||
+                              "Start conversation"}
+                          </span>
+
+                          {item.unreadCount >
+                            0 && (
+                            <span className="conversation-unread">
+                              {item.unreadCount >
+                              99
+                                ? "99+"
+                                : item.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                }
+              )
+            )}
+          </div>
         </aside>
 
-        {/* Chat section */}
+        {/* Chat panel */}
 
-        <section
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            minWidth: 0,
-          }}
-        >
+        <section className="chat-panel">
           {!conversationId ? (
-            <div
-              style={{
-                margin: "auto",
-                textAlign: "center",
-                color: "#777",
-              }}
-            >
-              <h3>Select a conversation</h3>
+            <div className="empty-chat">
+              <div className="empty-chat-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
+                </svg>
+              </div>
+
+              <h2>
+                Select a conversation
+              </h2>
 
               <p>
-                Your private messages will appear here.
+                Choose a student from your
+                messages to continue chatting.
               </p>
             </div>
           ) : (
             <>
               {/* Chat header */}
 
-              <header
-                style={{
-                  padding: "13px 18px",
-                  borderBottom: "1px solid #ddd",
-                }}
-              >
-                <strong>
-                  {activeOtherUser?.name ||
-                    "Private conversation"}
-                </strong>
+              <header className="chat-header">
+                <div className="chat-user">
+                  <div className="chat-avatar">
+                    {activeOtherUser?.name
+                      ?.charAt(0)
+                      .toUpperCase() ||
+                      "U"}
+                  </div>
 
-                <div
-                  style={{
-                    fontSize: "13px",
-                    color: "#666",
-                    marginTop: "3px",
-                  }}
-                >
-                  Request:{" "}
-                  {conversation?.request?.title}
+                  <div>
+                    <h2>
+                      {activeOtherUser?.name ||
+                        "Private conversation"}
+                    </h2>
+
+                    <p>
+                      {conversation?.request
+                        ?.subject}
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  className="chat-options-button"
+                  aria-label="Conversation options"
+                >
+                  •••
+                </button>
               </header>
+
+              {/* Request context */}
+
+              <div className="request-context">
+                <div className="request-context-icon">
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5Z" />
+
+                    <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5Z" />
+                  </svg>
+                </div>
+
+                <div className="request-context-text">
+                  <strong>
+                    Related to your request
+                  </strong>
+
+                  <span>
+                    {
+                      conversation?.request
+                        ?.title
+                    }
+                  </span>
+                </div>
+
+                <span className="request-arrow">
+                  ›
+                </span>
+              </div>
 
               {/* Messages */}
 
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "18px",
-                  background: "#f7f8fa",
-                }}
-              >
+              <div className="chat-messages">
+                {messages.length > 0 && (
+                  <div className="chat-date-divider">
+                    <span>
+                      {new Date(
+                        messages[0].createdAt
+                      ).toLocaleDateString(
+                        [],
+                        {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        }
+                      )}
+                    </span>
+                  </div>
+                )}
+
                 {error && (
-                  <p style={{ color: "#b91c1c" }}>
+                  <div className="chat-error">
                     {error}
-                  </p>
+                  </div>
                 )}
 
                 {messages.map((message) => {
+                  const senderId =
+                    message.sender?._id ||
+                    message.sender;
+
                   const isMine =
-                    message.sender?._id === user._id;
+                    senderId === user._id;
 
                   return (
                     <div
                       key={message._id}
-                      style={{
-                        display: "flex",
-                        justifyContent: isMine
-                          ? "flex-end"
-                          : "flex-start",
-                        marginBottom: "12px",
-                      }}
+                      className={
+                        isMine
+                          ? "message-row message-row-mine"
+                          : "message-row"
+                      }
                     >
-                      <div
-                        style={{
-                          maxWidth: "72%",
-                          padding: "9px 12px",
-                          borderRadius: isMine
-                            ? "14px 14px 2px 14px"
-                            : "14px 14px 14px 2px",
-                          background: isMine
-                            ? "#2563eb"
-                            : "white",
-                          color: isMine
-                            ? "white"
-                            : "#222",
-                          boxShadow:
-                            "0 1px 3px rgba(0,0,0,0.1)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            opacity: 0.75,
-                            marginBottom: "3px",
-                          }}
-                        >
-                          {isMine
-                            ? `You → ${message.recipient?.name}`
-                            : `${message.sender?.name} → You`}
+                      {!isMine && (
+                        <div className="message-avatar">
+                          {message.sender?.name
+                            ?.charAt(0)
+                            .toUpperCase() ||
+                            "U"}
                         </div>
+                      )}
 
-                        <div>{message.content}</div>
+                      <div className="message-wrapper">
+                        <div
+                          className={
+                            isMine
+                              ? "message-bubble message-bubble-mine"
+                              : "message-bubble message-bubble-received"
+                          }
+                        >
+                          <p>
+                            {message.content}
+                          </p>
+                        </div>
 
                         {message.fileUrl && (
                           <a
-                            href={message.fileUrl}
+                            href={
+                              message.fileUrl
+                            }
                             target="_blank"
                             rel="noreferrer"
-                            style={{
-                              color: isMine
-                                ? "white"
-                                : "#2563eb",
-                              display: "block",
-                              marginTop: "6px",
-                            }}
+                            className="message-attachment"
                           >
-                            View attached file
+                            <div className="attachment-icon">
+                              <svg
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                              >
+                                <path d="M6 2h8l4 4v16H6Z" />
+
+                                <path d="M14 2v5h5" />
+
+                                <path d="M9 13h6M9 17h5" />
+                              </svg>
+                            </div>
+
+                            <div className="attachment-details">
+                              <strong>
+                                Attached study
+                                document
+                              </strong>
+
+                              <span>
+                                Open attachment
+                              </span>
+                            </div>
+
+                            <span className="attachment-options">
+                              •••
+                            </span>
                           </a>
                         )}
 
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            opacity: 0.7,
-                            marginTop: "5px",
-                            textAlign: "right",
-                          }}
-                        >
-                          {new Date(
-                            message.createdAt
-                          ).toLocaleString()}
+                        <div className="message-meta">
+                          <span>
+                            {formatTime(
+                              message.createdAt
+                            )}
+                          </span>
+
+                          {isMine && (
+                            <span className="message-status">
+                              {message.read
+                                ? "✓✓ Read"
+                                : "✓ Sent"}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -410,45 +659,32 @@ const Messages = () => {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Message input */}
+              {/* Composer */}
 
               <form
+                className="message-composer"
                 onSubmit={handleSendMessage}
-                style={{
-                  padding: "12px",
-                  borderTop: "1px solid #ddd",
-                  background: "white",
-                }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                  }}
+                <label
+                  htmlFor="chat-file"
+                  className={
+                    file
+                      ? "attach-button attach-button-selected"
+                      : "attach-button"
+                  }
+                  title={
+                    file
+                      ? file.name
+                      : "Attach a file"
+                  }
                 >
-                  <input
-                    value={content}
-                    onChange={(event) =>
-                      setContent(event.target.value)
-                    }
-                    placeholder={`Message ${
-                      activeOtherUser?.name || "user"
-                    }...`}
-                    style={{
-                      flex: 1,
-                      padding: "10px",
-                    }}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={sending}
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
-                    {sending
-                      ? "Sending..."
-                      : "Send"}
-                  </button>
-                </div>
+                    <path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 0 1-2.8-2.8l8.9-8.9" />
+                  </svg>
+                </label>
 
                 <input
                   id="chat-file"
@@ -456,11 +692,38 @@ const Messages = () => {
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   onChange={(event) =>
                     setFile(
-                      event.target.files[0] || null
+                      event.target
+                        .files[0] || null
                     )
                   }
-                  style={{ marginTop: "8px" }}
+                  hidden
                 />
+
+                <input
+                  type="text"
+                  className="message-input"
+                  placeholder={
+                    file
+                      ? `Attached: ${file.name}`
+                      : "Type a message..."
+                  }
+                  value={content}
+                  onChange={(event) =>
+                    setContent(
+                      event.target.value
+                    )
+                  }
+                />
+
+                <button
+                  type="submit"
+                  className="send-button"
+                  disabled={sending}
+                >
+                  {sending
+                    ? "Sending..."
+                    : "Send"}
+                </button>
               </form>
             </>
           )}
