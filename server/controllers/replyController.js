@@ -1,11 +1,11 @@
 import Reply from "../models/Reply.js";
 import Request from "../models/Request.js";
 
-// Create a reply (public or private) to a request
+// @desc    Create a reply (public or private) to a request
 // @route   POST /api/replies
 export const createReply = async (req, res) => {
   try {
-    const { requestId, content, fileUrl, type } = req.body;
+    const { requestId, content, type } = req.body;
 
     if (!requestId || !content || !type) {
       return res.status(400).json({ message: "requestId, content and type are required" });
@@ -19,6 +19,13 @@ export const createReply = async (req, res) => {
     if (!request) {
       return res.status(404).json({ message: "Request not found" });
     }
+
+    if (request.postedBy.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: "You cannot reply to your own request" });
+    }
+
+    // Agar file upload hui hai (multer + Cloudinary), uska URL yahan milega
+    const fileUrl = req.file ? req.file.path : "";
 
     const reply = await Reply.create({
       content,
@@ -37,7 +44,7 @@ export const createReply = async (req, res) => {
   }
 };
 
-//Get all public replies for a request
+// @desc    Get all public replies for a request
 // @route   GET /api/replies/:requestId
 export const getPublicReplies = async (req, res) => {
   try {
@@ -54,7 +61,7 @@ export const getPublicReplies = async (req, res) => {
   }
 };
 
-//Get private replies for a request (only the original poster can see them)
+// @desc    Get private replies for a request (only the original poster can see them)
 // @route   GET /api/replies/private/:requestId
 export const getPrivateReplies = async (req, res) => {
   try {
