@@ -1,4 +1,6 @@
-const RequestCard = ({ request }) => {
+import DeleteRequestButton from "./DeleteRequestButton";
+
+const RequestCard = ({ request, onDeleted }) => {
   const authorName =
     request.postedBy?.name || "Unknown";
 
@@ -18,7 +20,11 @@ const RequestCard = ({ request }) => {
     <article className="request-card">
       <div className="request-card-accent" />
 
-      <div className="request-card-top">
+      <div
+        className={`request-card-top${
+          onDeleted ? " request-card-top--deletable" : ""
+        }`}
+      >
         <span className="request-subject-badge">
           <svg
             viewBox="0 0 24 24"
@@ -32,9 +38,17 @@ const RequestCard = ({ request }) => {
           {request.subject}
         </span>
 
-        <span className="request-card-date">
-          {formattedDate}
-        </span>
+        <div className="request-card-top-actions">
+          <span className="request-card-date">
+            {formattedDate}
+          </span>
+          {onDeleted && (
+            <DeleteRequestButton
+              requestId={request._id}
+              onDeleted={onDeleted}
+            />
+          )}
+        </div>
       </div>
 
       <h3 className="request-card-title">

@@ -7,14 +7,17 @@ import {
 import {
   useParams,
   Link,
+  useNavigate,
 } from "react-router-dom";
 
 import api from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 import ReplyBox from "../components/ReplyBox";
+import DeleteRequestButton from "../components/DeleteRequestButton";
 
 const RequestDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
   const [request, setRequest] = useState(null);
@@ -111,16 +114,28 @@ const RequestDetail = () => {
     >
       {/* Request information */}
 
-      <span
-        style={{
-          background: "#eee",
-          padding: "2px 8px",
-          borderRadius: "4px",
-          fontSize: "12px",
-        }}
-      >
-        {request.subject}
-      </span>
+      <div className="request-detail-top">
+        <span
+          style={{
+            background: "#eee",
+            padding: "2px 8px",
+            borderRadius: "4px",
+            fontSize: "12px",
+          }}
+        >
+          {request.subject}
+        </span>
+        {isOwner && (
+          <DeleteRequestButton
+            requestId={request._id}
+            onDeleted={() =>
+              navigate("/profile", {
+                state: { requestDeleted: true },
+              })
+            }
+          />
+        )}
+      </div>
 
       <h2 style={{ margin: "8px 0" }}>
         {request.title}

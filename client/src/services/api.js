@@ -16,4 +16,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const deleteRequest = (requestId) =>
+  api.delete(`/requests/${requestId}`);
+
 export default api;
