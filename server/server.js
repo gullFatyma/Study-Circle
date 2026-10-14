@@ -17,10 +17,7 @@ connectDB();
 
 const app = express();
 
-/*
-  Express app ko HTTP server mein wrap kiya hai,
-  kyunki Socket.IO ko HTTP server chahiye.
-*/
+
 const server = http.createServer(app);
 
 app.use(

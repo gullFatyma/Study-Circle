@@ -90,201 +90,144 @@ const RequestDetail = () => {
 
   if (loading) {
     return (
-      <p style={{ textAlign: "center" }}>
-        Loading...
-      </p>
+      <main className="request-detail-page">
+        <p className="request-detail-status">Loading...</p>
+      </main>
     );
   }
 
   if (!request) {
     return (
-      <p style={{ textAlign: "center" }}>
-        Request not found.
-      </p>
+      <main className="request-detail-page">
+        <p className="request-detail-status">
+          Request not found.
+        </p>
+      </main>
     );
   }
 
+  const authorName = request.postedBy?.name || "Unknown";
+  const authorInitial = authorName.charAt(0).toUpperCase();
+  const formattedDate = new Date(request.createdAt).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
-    <div
-      style={{
-        maxWidth: "700px",
-        margin: "30px auto",
-        padding: "0 20px",
-      }}
-    >
-      {/* Request information */}
+    <main className="request-detail-page">
+      <Link className="request-detail-back" to="/">
+        ← Back to feed
+      </Link>
 
-      <div className="request-detail-top">
-        <span
-          style={{
-            background: "#eee",
-            padding: "2px 8px",
-            borderRadius: "4px",
-            fontSize: "12px",
-          }}
-        >
-          {request.subject}
-        </span>
-        {isOwner && (
-          <DeleteRequestButton
-            requestId={request._id}
-            onDeleted={() =>
-              navigate("/profile", {
-                state: { requestDeleted: true },
-              })
-            }
-          />
+      <article className="request-detail-card">
+        <div className="request-detail-card-accent" />
+        <div className="request-detail-top">
+          <span className="request-subject-badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5Z" />
+              <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5Z" />
+            </svg>
+            {request.subject}
+          </span>
+          {isOwner && (
+            <DeleteRequestButton
+              requestId={request._id}
+              onDeleted={() =>
+                navigate("/profile", {
+                  state: { requestDeleted: true },
+                })
+              }
+            />
+          )}
+        </div>
+
+        <h1 className="request-detail-title">{request.title}</h1>
+
+        {request.description && (
+          <p className="request-detail-description">
+            {request.description}
+          </p>
         )}
-      </div>
 
-      <h2 style={{ margin: "8px 0" }}>
-        {request.title}
-      </h2>
-
-      {request.description && (
-        <p style={{ color: "#555" }}>
-          {request.description}
-        </p>
-      )}
-
-      <small style={{ color: "#888" }}>
-        Posted by {request.postedBy?.name}
-      </small>
-
-      <hr style={{ margin: "25px 0" }} />
-
-      {/* Reply form only for other users */}
+        <div className="request-card-footer request-detail-footer">
+          <div className="request-author">
+            <div className="request-author-avatar">
+              {authorInitial}
+            </div>
+            <div>
+              <span>Posted by</span>
+              <strong>{authorName}</strong>
+            </div>
+          </div>
+          <time className="request-detail-date" dateTime={request.createdAt}>
+            {formattedDate}
+          </time>
+        </div>
+      </article>
 
       {user && !isOwner && (
-        <ReplyBox
-          requestId={id}
-          onReplyPosted={fetchAll}
-        />
+        <ReplyBox requestId={id} onReplyPosted={fetchAll} />
       )}
 
-      {/* Request owner */}
-
       {user && isOwner && (
-        <div
-          style={{
-            padding: "12px",
-            marginBottom: "20px",
-            background: "#f7f8fa",
-            border: "1px solid #ddd",
-            borderRadius: "6px",
-          }}
-        >
-          <p
-            style={{
-              color: "#666",
-              margin: "0 0 8px",
-            }}
-          >
-            You cannot reply to your own request.
-          </p>
-
-          <Link to="/messages">
-            Open private messages
-          </Link>
+        <div className="request-owner-notice">
+          <p>You cannot reply to your own request.</p>
+          <Link to="/messages">Open private messages</Link>
         </div>
       )}
 
-      {/* Public replies */}
+      <section className="request-replies-section">
+        <h2 className="request-replies-heading">
+          Public Replies <span>({publicReplies.length})</span>
+        </h2>
 
-      <h3 style={{ marginTop: "25px" }}>
-        Public Replies ({publicReplies.length})
-      </h3>
-
-      {publicReplies.length === 0 ? (
-        <p style={{ color: "#888" }}>
-          No public replies yet.
-        </p>
-      ) : (
-        publicReplies.map((reply) => (
-          <div
-            key={reply._id}
-            style={{
-              border: "1px solid #eee",
-              padding: "10px",
-              marginBottom: "8px",
-            }}
-          >
-            <p style={{ margin: "0 0 4px" }}>
-              {reply.content}
-            </p>
-
-            {reply.fileUrl && (
-              <a
-                href={reply.fileUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View attached file
-              </a>
-            )}
-
-            <br />
-
-            <small style={{ color: "#888" }}>
-              — {reply.repliedBy?.name}
-            </small>
+        {publicReplies.length === 0 ? (
+          <p className="request-replies-empty">No public replies yet.</p>
+        ) : (
+          <div className="request-replies-list">
+            {publicReplies.map((reply) => (
+              <article className="request-reply-card" key={reply._id}>
+                <p>{reply.content}</p>
+                {reply.fileUrl && (
+                  <a href={reply.fileUrl} target="_blank" rel="noreferrer">
+                    View attached file
+                  </a>
+                )}
+                <small>— {reply.repliedBy?.name}</small>
+              </article>
+            ))}
           </div>
-        ))
-      )}
-
-      {/* Old private replies */}
+        )}
+      </section>
 
       {isOwner && privateReplies.length > 0 && (
-        <>
-          <h3 style={{ marginTop: "25px" }}>
-            Previous Private Replies (
-            {privateReplies.length})
-          </h3>
-
-          <p
-            style={{
-              color: "#666",
-              fontSize: "14px",
-            }}
-          >
-            These previous replies are also available
-            in the Messages section.
+        <section className="request-replies-section">
+          <h2 className="request-replies-heading">
+            Previous Private Replies <span>({privateReplies.length})</span>
+          </h2>
+          <p className="request-private-replies-note">
+            These previous replies are also available in the Messages section.
           </p>
-
-          {privateReplies.map((reply) => (
-            <div
-              key={reply._id}
-              style={{
-                border: "1px solid #eee",
-                padding: "10px",
-                marginBottom: "8px",
-                background: "#fafafa",
-              }}
-            >
-              <p style={{ margin: "0 0 4px" }}>
-                {reply.content}
-              </p>
-
-              {reply.fileUrl && (
-                <a
-                  href={reply.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View attached file
-                </a>
-              )}
-
-              <br />
-
-              <small style={{ color: "#888" }}>
-                — {reply.repliedBy?.name} (private)
-              </small>
-            </div>
-          ))}
-        </>
+          <div className="request-replies-list">
+            {privateReplies.map((reply) => (
+              <article
+                className="request-reply-card request-reply-card--private"
+                key={reply._id}
+              >
+                <p>{reply.content}</p>
+                {reply.fileUrl && (
+                  <a href={reply.fileUrl} target="_blank" rel="noreferrer">
+                    View attached file
+                  </a>
+                )}
+                <small>— {reply.repliedBy?.name} (private)</small>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
-    </div>
+    </main>
   );
 };
 

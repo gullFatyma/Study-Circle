@@ -78,23 +78,17 @@ const ReplyBox = ({ requestId, onReplyPosted }) => {
   };
 
   return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        padding: "15px",
-        marginBottom: "20px",
-      }}
-    >
-      <h4>Write a Reply</h4>
+    <section className="reply-box">
+      <h2>Write a Reply</h2>
 
       {error && (
-        <p style={{ color: "red" }}>
+        <p className="reply-feedback reply-feedback--error" role="alert">
           {error}
         </p>
       )}
 
       {success && (
-        <p style={{ color: "#15803d" }}>
+        <p className="reply-feedback reply-feedback--success" role="status">
           {success}{" "}
           {conversationId && (
             <Link to={`/messages/${conversationId}`}>
@@ -106,22 +100,16 @@ const ReplyBox = ({ requestId, onReplyPosted }) => {
 
       <form onSubmit={handleSubmit}>
         <textarea
+          className="reply-textarea"
           placeholder="Share notes, an answer, or a helpful link..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          style={{
-            width: "100%",
-            marginBottom: "8px",
-            minHeight: "70px",
-          }}
         />
 
-        <div style={{ marginBottom: "10px" }}>
-          <label>
+        <div className="reply-file-field">
+          <label htmlFor={`reply-file-${requestId}`}>
             Attach a file (PDF, image, doc — optional):
           </label>
-
-          <br />
 
           <input
             id={`reply-file-${requestId}`}
@@ -133,8 +121,8 @@ const ReplyBox = ({ requestId, onReplyPosted }) => {
           />
         </div>
 
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ marginRight: "15px" }}>
+        <div className="reply-visibility-options">
+          <label>
             <input
               type="radio"
               name="replyType"
@@ -163,12 +151,13 @@ const ReplyBox = ({ requestId, onReplyPosted }) => {
 
         <button
           type="submit"
+          className="reply-submit-button"
           disabled={posting}
         >
           {posting ? "Posting..." : "Send Reply"}
         </button>
       </form>
-    </div>
+    </section>
   );
 };
 
